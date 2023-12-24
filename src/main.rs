@@ -1,3 +1,5 @@
+use std::{path::Path, ffi::OsString};
+
 use clap::{Parser, Subcommand};
 
 /// Utility to tag files for easy access
@@ -16,34 +18,45 @@ enum Commands {
     /// List tags overall or of a file
     Tags {
         /// Target file
-        file: Option<String>,
+        file: Option<OsString>,
     },
 
     /// Add tags to a file
     #[command(arg_required_else_help = true)]
     Add {
         /// Target file
-        file: String,
+        file: OsString,
 
         /// Tags to add
         #[arg(required = true)]
-        tags: Vec<String>,
+        tags: Vec<OsString>,
     },
 
     /// Remove tags from a file
     #[command(arg_required_else_help = true)]
     Rm {
         /// Target file
-        file: String,
+        file: OsString,
 
         /// Tags to remove
         #[arg(required = true)]
-        tags: Vec<String>,
+        tags: Vec<OsString>,
     },
 }
+
 
 fn main() {
     let args = Cli::parse();
 
-    dbg!(args);
+    match args.command {
+        Commands::Init => todo!("Init database"),
+        Commands::Tags { file } => {
+            match file {
+                Some(name) => todo!("File tags {:?}", name),
+                None => todo!("Overall tags"),
+            }
+        }
+        Commands::Add { file, tags } => todo!("Add tags {:?}, {:?}", file, tags),
+        Commands::Rm { file, tags } => todo!("Remove {:?}, {:?}", file, tags),
+    }
 }
