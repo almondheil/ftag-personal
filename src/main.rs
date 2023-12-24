@@ -1,4 +1,4 @@
-use std::{path::Path, ffi::OsString};
+use std::{ffi::OsString, path::Path};
 
 use clap::{Parser, Subcommand};
 
@@ -44,18 +44,15 @@ enum Commands {
     },
 }
 
-
 fn main() {
     let args = Cli::parse();
 
     match args.command {
         Commands::Init => todo!("Init database"),
-        Commands::Tags { file } => {
-            match file {
-                Some(name) => todo!("File tags {:?}", name),
-                None => todo!("Overall tags"),
-            }
-        }
+        Commands::Tags { file } => match file {
+            Some(name) => todo!("File tags {:?}", name),
+            None => todo!("Overall tags"),
+        },
         Commands::Add { file, tags } => todo!("Add tags {:?}, {:?}", file, tags),
         Commands::Rm { file, tags } => todo!("Remove {:?}, {:?}", file, tags),
     }
