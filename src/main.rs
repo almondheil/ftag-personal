@@ -1,6 +1,10 @@
-use std::{ffi::OsString, path::PathBuf, process};
+use std::ffi::OsString;
+
+use camino::Utf8PathBuf;
 
 use clap::{Parser, Subcommand};
+
+mod ftag;
 
 /// Utility to tag files for easy access
 #[derive(Debug, Parser)]
@@ -18,14 +22,14 @@ enum Commands {
     /// List tags of a path or whole database
     Tags {
         /// Target path
-        path: Option<PathBuf>,
+        path: Option<Utf8PathBuf>,
     },
 
     /// Add tags to a path
     #[command(arg_required_else_help = true)]
     Add {
         /// Target path
-        path: PathBuf,
+        path: Utf8PathBuf,
 
         /// Tags to add
         #[arg(required = true)]
@@ -36,7 +40,7 @@ enum Commands {
     #[command(arg_required_else_help = true)]
     Rm {
         /// Target path
-        path: PathBuf,
+        path: Utf8PathBuf,
 
         /// Tags to remove
         #[arg(required = true)]
@@ -49,40 +53,25 @@ fn main() {
 
     // Handle whichever command the user chose
     match args.command {
-        Commands::Init => todo!("Init database"),
+        Commands::Init => {
+            match ftag::init_db() {
+                Ok(_) => println!("Okay"),
+                Err(_) => eprintln!("Could not initialize database!"),
+            }
+        }
 
         Commands::Tags { path } => match path {
             Some(path) => {
-                // Make sure the provided arg is a valid path
-                if !path.exists() {
-                    eprintln!("Path `{}` does not exist!", path.display());
-                    process::exit(2);
+                match ftag::get_file_tags(path) {
+                    Ok(tags) => println!("{:?}", tags),
+                    Err(_) => todo!(),
                 }
-
-                // List the tags of that path
-                todo!("Single tags for {}", path.display());
-            }
-            None => todo!("Database tags"),
+            },
+            None => ftag::get_global_tags(),
         },
 
-        Commands::Add { path, tags } => {
-            // Make sure the provided arg is a valid path
-            if !path.exists() {
-                eprintln!("Path `{}` does not exist!", path.display());
-                process::exit(2);
-            }
+        Commands::Add { path, tags } => ftag::add_tags(path, tags),
 
-            todo!("Add tags {:?}, {:?}", path, tags);
-        }
-
-        Commands::Rm { path, tags } => {
-            // Make sure the provided arg is a valid path
-            if !path.exists() {
-                eprintln!("Path `{}` does not exist!", path.display());
-                process::exit(2);
-            }
-
-            todo!("Remove tags {:?}, {:?}", path, tags);
-        }
+        Commands::Rm { path, tags } => ftag::remove_tags(path, tags),
     }
 }
