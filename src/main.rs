@@ -1,10 +1,12 @@
-use std::ffi::OsString;
+use std::{io::ErrorKind, ffi::OsString};
 
 use camino::Utf8PathBuf;
 
 use clap::{Parser, Subcommand};
 
 mod ftag;
+
+use ftag::FtagError;
 
 /// Utility to tag files for easy access
 #[derive(Debug, Parser)]
@@ -55,23 +57,50 @@ fn main() {
     match args.command {
         Commands::Init => {
             match ftag::init_db() {
-                Ok(_) => println!("Okay"),
-                Err(_) => eprintln!("Could not initialize database!"),
+                Ok(_) => println!("Initialized database."),
+                Err(err) => match err {
+                    FtagError::IoError(ErrorKind::AlreadyExists) => eprintln!("Database already exists!"),
+                    FtagError::DatabaseError(cause) => eprintln!("Database error: {}!", cause.to_string()),
+                    _ => eprintln!("Unexpected error!")
+                },
             }
         }
 
         Commands::Tags { path } => match path {
             Some(path) => {
-                match ftag::get_file_tags(path) {
+                match ftag::get_file_tags(&path) {
+                    Err(err) => match err {
+                        FtagError::IoError(ErrorKind::NotFound) => eprintln!("Filepath {} does not exist!", path),
+                        FtagError::DatabaseError(cause) => eprintln!("Database error: {}!", cause.to_string()),
+                        _ => eprintln!("Unexpected error!"),
+                    }
+                    // TODO: print vectors nicely (probably without debug), everywhere
                     Ok(tags) => println!("{:?}", tags),
-                    Err(_) => todo!(),
                 }
             },
-            None => ftag::get_global_tags(),
+            None => {
+                match ftag::get_global_tags() {
+                    Err(err) => match err {
+                        FtagError::DatabaseError(cause) => eprintln!("Database error: {}!", cause.to_string()),
+                        _ => eprintln!("Unexpected error!"),
+                    },
+                    Ok(tags) => println!("{:?}", tags),
+                }
+            },
         },
 
-        Commands::Add { path, tags } => ftag::add_tags(path, tags),
+        Commands::Add { path, tags } => {
+            match ftag::add_tags(&path, tags) {
+                Ok(_) => todo!(),
+                Err(err) => eprintln!("{:?}", err), // TODO: handle error properly
+            }
+        },
 
-        Commands::Rm { path, tags } => ftag::remove_tags(path, tags),
+        Commands::Rm { path, tags } => {
+            match ftag::remove_tags(&path, tags) {
+                Ok(_) => todo!(),
+                Err(_) => todo!(),
+            }
+        }
     }
 }
