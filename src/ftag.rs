@@ -1,7 +1,7 @@
 use camino::Utf8PathBuf;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
-use std::{ffi::OsString, io, collections::hash_set::HashSet};
+use std::{io, collections::hash_set::HashSet};
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
@@ -142,7 +142,6 @@ pub fn get_global_tags() -> Result<HashSet<String>, FtagError> {
     let mut stmt = conn.prepare("SELECT tags FROM tags;")?;
     let result = stmt.query_map( params![],
         |row| {
-            // Process each name in the result set
             let tags: String = row.get(0)?;
             let deserialized: Taglist = serde_json::from_str(&tags).unwrap();
             for tag in deserialized.tags {
@@ -157,7 +156,7 @@ pub fn get_global_tags() -> Result<HashSet<String>, FtagError> {
     Ok(all_tags)
 }
 
-pub fn add_tags(path: &Utf8PathBuf, add_tags: Vec<OsString>) -> Result<HashSet<String>, FtagError> {
+pub fn add_tags(path: &Utf8PathBuf, add_tags: Vec<String>) -> Result<HashSet<String>, FtagError> {
     if !path.exists() {
         return Err(FtagError::IoError(io::ErrorKind::NotFound));
     }
@@ -178,7 +177,6 @@ pub fn add_tags(path: &Utf8PathBuf, add_tags: Vec<OsString>) -> Result<HashSet<S
 
     // Insert any unique new tags
     for tag in add_tags {
-        let tag: String = tag.to_string_lossy().to_string();
         newtags.tags.insert(tag);
     }
 
@@ -187,7 +185,7 @@ pub fn add_tags(path: &Utf8PathBuf, add_tags: Vec<OsString>) -> Result<HashSet<S
     Ok(newtags.tags)
 }
 
-pub fn remove_tags(path: &Utf8PathBuf, remove_tags: Vec<OsString>) -> Result<HashSet<String>, FtagError> {
+pub fn remove_tags(path: &Utf8PathBuf, remove_tags: Vec<String>) -> Result<HashSet<String>, FtagError> {
     if !path.exists() {
         return Err(FtagError::IoError(io::ErrorKind::NotFound));
     }
@@ -216,6 +214,33 @@ pub fn remove_tags(path: &Utf8PathBuf, remove_tags: Vec<OsString>) -> Result<Has
     Ok(newtags.tags)
 }
 
-pub fn find_tags(tags: &Vec<OsString>) -> Result<Vec<String>, FtagError> {
-    todo!();
+pub fn find_tags(find_tags: &Vec<String>) -> Result<Vec<String>, FtagError> {
+    if !db_exists() {
+        return Err(FtagError::NoDatabaseError);
+    }
+
+    // Store a vector of the files containing those tags
+    let mut matching_files: Vec<String> = vec![];
+
+    let conn = Connection::open(get_db_path())?;
+    let mut stmt = conn.prepare("SELECT path, tags FROM tags;")?;
+    let result = stmt.query_map( params![],
+        |row| {
+            // Process each name in the result set
+            let name: String = row.get(0)?;
+            let tags: String = row.get(1)?;
+            let deserialized: Taglist = serde_json::from_str(&tags).unwrap();
+
+            let all_tags_match = find_tags.iter().all(|item| deserialized.tags.contains(item));
+            if all_tags_match {
+                matching_files.push(name);
+            }
+            
+            Ok(())
+        },
+    )?;
+
+    // TODO: I'm supposed to check for errors in the result what do I do here
+    result.for_each(|_| {});
+    Ok(matching_files)
 }

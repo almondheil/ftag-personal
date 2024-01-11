@@ -1,11 +1,9 @@
-use std::{io::ErrorKind, ffi::OsString, collections::HashSet, arch::is_aarch64_feature_detected};
-
+use std::{io::ErrorKind, collections::HashSet};
 use camino::Utf8PathBuf;
-
 use clap::{Parser, Subcommand};
+use itertools::Itertools;
 
 mod ftag;
-
 use ftag::FtagError;
 
 /// Utility to tag files for easy access
@@ -35,7 +33,7 @@ enum Commands {
 
         /// Tags to add
         #[arg(required = true)]
-        tags: Vec<OsString>,
+        tags: Vec<String>,
     },
 
     /// Remove tags from a path
@@ -46,14 +44,14 @@ enum Commands {
 
         /// Tags to remove
         #[arg(required = true)]
-        tags: Vec<OsString>,
+        tags: Vec<String>,
     },
 
     /// Find files with particular tags
     #[command(arg_required_else_help = true)]
     Find {
         #[arg(required = true)]
-        tags: Vec<OsString>,
+        tags: Vec<String>,
     },
 }
 
@@ -125,7 +123,16 @@ fn main() {
         Commands::Find { tags } => {
             match ftag::find_tags(&tags) {
                 Err(err) => eprintln!("{}", err.to_string()),
-                Ok(file_list) => println!("{:?}", file_list),
+                Ok(mut file_list) => {
+                    // Alphabetize the vector returned
+                    file_list.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+
+                    // Print them out with a little header 
+                    println!("Files with tags {}", tags.iter().format(" "));
+                    for filename in file_list {
+                        println!("  {}", filename);
+                    }
+                },
             }
 
         },
