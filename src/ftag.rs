@@ -1,5 +1,5 @@
 use camino::Utf8PathBuf;
-use rusqlite::Connection;
+use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
 use std::{ffi::OsString, io::ErrorKind};
 
@@ -14,11 +14,18 @@ struct Taglist {
 pub enum FtagError {
     IoError(ErrorKind),
     DatabaseError(rusqlite::Error),
+    JsonError(serde_json::Error),
 }
 impl From<rusqlite::Error> for FtagError {
     // allows us to use ? with rusqlite operations (very helpful)
     fn from(err: rusqlite::Error) -> Self {
         FtagError::DatabaseError(err)
+    }
+}
+impl From<serde_json::Error> for FtagError {
+    // allows us to use ? with rusqlite operations (very helpful)
+    fn from(err: serde_json::Error) -> Self {
+        FtagError::JsonError(err)
     }
 }
 
@@ -43,7 +50,7 @@ pub fn init_db() -> Result<(), FtagError> {
     let conn = Connection::open(get_db_path())?;
     conn.execute(
         "CREATE TABLE tags (
-            id      INTEGER AUTOINCREMENT PRIMARY KEY,
+            id      INTEGER PRIMARY KEY,
             path    TEXT NOT NULL,
             tags    TEXT
         )",
@@ -80,13 +87,40 @@ pub fn add_tags(path: &Utf8PathBuf, tags: Vec<OsString>) -> Result<(), FtagError
     if !path.exists() {
         return Err(FtagError::IoError(ErrorKind::NotFound));
     }
+    
+    // Create an empty list of tags
+    let mut taglist = Taglist { tags: vec![] };
 
-    // Check if there is already an entry for this path (existing tags)
+    // Prepare a query for the correct row of the database
     let conn = Connection::open(get_db_path())?;
-    let mut stmt = conn.prepare("SELECT * FROM tags WHERE path = :path;")?;
-    let mut rows = stmt.query(())?;
-    let row = rows.next();
-    // Construct the tags
+    let mut stmt = conn.prepare("SELECT tags FROM tags WHERE path = ?")?;
+    
+    // Query for a row with matching path
+    let json = stmt.query_row(params![path.to_string()], |row| {
+        let json: String = row.get(0)?;
+        Ok(json)
+    });
+
+    // If an entry exists, append its tags to the taglist
+    if let Ok(json) = json {
+        let mut deserialized: Taglist = serde_json::from_str(&json).unwrap();
+        taglist.tags.append(&mut deserialized.tags);
+    }
+
+    // Push each of the provided tags into the vector too
+    for tag in tags {
+        // TODO: Is there a better way to do this?
+        let tag: String = tag.to_string_lossy().to_string();
+        taglist.tags.push(tag);
+    }
+
+    // Serialize the vector as json
+    let serialized = serde_json::to_string(&taglist)?;
+
+    // Insert or replace the correct row with the updated tags
+    let mut stmt = conn.prepare("INSERT OR REPLACE INTO tags(path, tags) VALUES (?, ?);")?;
+    stmt.execute(params![path.to_string(), serialized])?;
+
     Ok(())
 }
 
