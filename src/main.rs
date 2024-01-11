@@ -96,8 +96,11 @@ fn main() {
 
         Commands::Rm { path, tags } => {
             match ftag::remove_tags(&path, tags) {
-                Err(_) => todo!(),
-                Ok(_) => todo!(),
+                Err(err) => match err {
+                    FtagError::IoError(ErrorKind::NotFound) => eprintln!("Filepath {} does not exist!", path),
+                    _ => eprintln!("{}", err.to_string()),
+                },
+                Ok(newtags) => println!("{:?}", newtags),
             }
         }
     }
