@@ -1,4 +1,4 @@
-use std::{io::ErrorKind, ffi::OsString};
+use std::{io::ErrorKind, ffi::OsString, collections::HashSet, arch::is_aarch64_feature_detected};
 
 use camino::Utf8PathBuf;
 
@@ -50,6 +50,18 @@ enum Commands {
     },
 }
 
+fn display_tags(name: String, tags: HashSet<String>) {
+    // Get the HashSet as a vector and alphabetize it
+    let mut tags: Vec<_> = tags.into_iter().collect();
+    tags.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+
+    // Print them out with a little header 
+    println!("{} tags:", name);
+    for tag in tags {
+        println!("  {}", tag);
+    }
+}
+
 fn main() {
     let args = Cli::parse();
 
@@ -72,14 +84,13 @@ fn main() {
                         FtagError::IoError(ErrorKind::NotFound) => eprintln!("Filepath {} does not exist!", path),
                         _ => eprintln!("{}", err.to_string())
                     }
-                    // TODO: print vectors nicely (probably without debug), everywhere
-                    Ok(tags) => println!("{:?}", tags),
+                    Ok(tags) => display_tags(path.to_string(), tags),
                 }
             },
             None => {
                 match ftag::get_global_tags() {
                     Err(err) => eprintln!("{}", err.to_string()),
-                    Ok(tags) => println!("{:?}", tags),
+                    Ok(tags) => display_tags("all file".to_string(), tags),
                 }
             },
         },
@@ -90,7 +101,7 @@ fn main() {
                     FtagError::IoError(ErrorKind::NotFound) => eprintln!("Filepath {} does not exist!", path),
                     _ => eprintln!("{}", err.to_string()),
                 },
-                Ok(newtags) => println!("{:?}", newtags),
+                Ok(new_tags) => display_tags(path.to_string(), new_tags),
             }
         },
 
@@ -100,7 +111,7 @@ fn main() {
                     FtagError::IoError(ErrorKind::NotFound) => eprintln!("Filepath {} does not exist!", path),
                     _ => eprintln!("{}", err.to_string()),
                 },
-                Ok(newtags) => println!("{:?}", newtags),
+                Ok(new_tags) => display_tags(path.to_string(), new_tags),
             }
         }
     }
