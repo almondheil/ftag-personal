@@ -215,3 +215,7 @@ pub fn remove_tags(path: &Utf8PathBuf, remove_tags: Vec<OsString>) -> Result<Has
     update_row_into_db(path, serde_json::to_string(&newtags)?, &query)?;    
     Ok(newtags.tags)
 }
+
+pub fn find_tags(tags: &Vec<OsString>) -> Result<Vec<String>, FtagError> {
+    todo!();
+}

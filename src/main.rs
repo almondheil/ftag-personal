@@ -48,6 +48,13 @@ enum Commands {
         #[arg(required = true)]
         tags: Vec<OsString>,
     },
+
+    /// Find files with particular tags
+    #[command(arg_required_else_help = true)]
+    Find {
+        #[arg(required = true)]
+        tags: Vec<OsString>,
+    },
 }
 
 fn display_tags(name: String, tags: HashSet<String>) {
@@ -113,6 +120,14 @@ fn main() {
                 },
                 Ok(new_tags) => display_tags(path.to_string(), new_tags),
             }
-        }
+        },
+
+        Commands::Find { tags } => {
+            match ftag::find_tags(&tags) {
+                Err(err) => eprintln!("{}", err.to_string()),
+                Ok(file_list) => println!("{:?}", file_list),
+            }
+
+        },
     }
 }
