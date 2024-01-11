@@ -123,14 +123,14 @@ fn main() {
         Commands::Find { tags } => {
             match ftag::find_tags(&tags) {
                 Err(err) => eprintln!("{}", err.to_string()),
-                Ok(mut file_list) => {
+                Ok(mut files) => {
                     // Alphabetize the vector returned
-                    file_list.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+                    files.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
 
                     // Print them out with a little header 
                     println!("Files with tags {}", tags.iter().format(" "));
-                    for filename in file_list {
-                        println!("  {}", filename);
+                    for file in files {
+                        println!("  {}", file);
                     }
                 },
             }
