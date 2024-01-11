@@ -60,8 +60,7 @@ fn main() {
                 Ok(_) => println!("Initialized database."),
                 Err(err) => match err {
                     FtagError::IoError(ErrorKind::AlreadyExists) => eprintln!("Database already exists!"),
-                    FtagError::DatabaseError(cause) => eprintln!("Database error: {}!", cause.to_string()),
-                    _ => eprintln!("Unexpected error!")
+                    _ => eprintln!("{}", err.to_string())
                 },
             }
         }
@@ -71,8 +70,7 @@ fn main() {
                 match ftag::get_file_tags(&path) {
                     Err(err) => match err {
                         FtagError::IoError(ErrorKind::NotFound) => eprintln!("Filepath {} does not exist!", path),
-                        FtagError::DatabaseError(cause) => eprintln!("Database error: {}!", cause.to_string()),
-                        _ => eprintln!("Unexpected error!"),
+                        _ => eprintln!("{}", err.to_string())
                     }
                     // TODO: print vectors nicely (probably without debug), everywhere
                     Ok(tags) => println!("{:?}", tags),
@@ -92,14 +90,17 @@ fn main() {
         Commands::Add { path, tags } => {
             match ftag::add_tags(&path, tags) {
                 Ok(_) => todo!(),
-                Err(err) => eprintln!("{:?}", err), // TODO: handle error properly
+                Err(err) => match err {
+                    FtagError::IoError(ErrorKind::NotFound) => eprintln!("Filepath {} does not exist!", path),
+                    _ => eprintln!("{}", err.to_string()),
+                },
             }
         },
 
         Commands::Rm { path, tags } => {
             match ftag::remove_tags(&path, tags) {
-                Ok(_) => todo!(),
                 Err(_) => todo!(),
+                Ok(_) => todo!(),
             }
         }
     }

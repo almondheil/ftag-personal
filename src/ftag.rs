@@ -13,19 +13,28 @@ struct Taglist {
 #[derive(Debug)]
 pub enum FtagError {
     IoError(ErrorKind),
+    NoDatabaseError,
     DatabaseError(rusqlite::Error),
     JsonError(serde_json::Error),
 }
 impl From<rusqlite::Error> for FtagError {
-    // allows us to use ? with rusqlite operations (very helpful)
     fn from(err: rusqlite::Error) -> Self {
         FtagError::DatabaseError(err)
     }
 }
 impl From<serde_json::Error> for FtagError {
-    // allows us to use ? with rusqlite operations (very helpful)
     fn from(err: serde_json::Error) -> Self {
         FtagError::JsonError(err)
+    }
+}
+impl ToString for FtagError {
+    fn to_string(&self) -> String {
+        match self {
+            FtagError::IoError(err) => format!("IO Error: {}", err.to_string()),
+            FtagError::NoDatabaseError => "Database error: Database not initialized".to_string(),
+            FtagError::DatabaseError(err) => format!("Database Error: {}", err.to_string()),
+            FtagError::JsonError(err) => format!("JSON Error: {}", err.to_string()),
+        }
     }
 }
 
@@ -76,7 +85,7 @@ pub fn get_file_tags(path: &Utf8PathBuf) -> Result<Vec<String>, FtagError> {
 
 pub fn get_global_tags() -> Result<Vec<String>, FtagError> {
     if !db_exists() {
-        return Err(FtagError::IoError(ErrorKind::NotFound));
+        return Err(FtagError::NoDatabaseError);
     }
 
     let tags = vec!["fake".to_string(), "global".to_string(), "tags".to_string()];
