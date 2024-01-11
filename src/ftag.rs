@@ -1,5 +1,5 @@
 use camino::Utf8PathBuf;
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::{ffi::OsString, io::ErrorKind};
 
@@ -92,51 +92,68 @@ pub fn get_global_tags() -> Result<Vec<String>, FtagError> {
     Ok(tags)
 }
 
-pub fn add_tags(path: &Utf8PathBuf, tags: Vec<OsString>) -> Result<(), FtagError> {
+pub fn add_tags(path: &Utf8PathBuf, tags: Vec<OsString>) -> Result<Vec<String>, FtagError> {
     if !path.exists() {
         return Err(FtagError::IoError(ErrorKind::NotFound));
     }
-    
-    // Create an empty list of tags
-    let mut taglist = Taglist { tags: vec![] };
+    if !db_exists() {
+        return Err(FtagError::NoDatabaseError);
+    }
 
+    
     // Prepare a query for the correct row of the database
     let conn = Connection::open(get_db_path())?;
-    let mut stmt = conn.prepare("SELECT tags FROM tags WHERE path = ?")?;
+    let mut stmt = conn.prepare("SELECT id, tags FROM tags WHERE path = ?")?;
     
     // Query for a row with matching path
-    let json = stmt.query_row(params![path.to_string()], |row| {
-        let json: String = row.get(0)?;
-        Ok(json)
+    let query = stmt.query_row(params![path.to_string()], |row| {
+        let id: u32 = row.get(0)?;
+        let json: String = row.get(1)?;
+        Ok((id, json))
     });
+    
+    // Create an empty list of tags
+    let mut newtags = Taglist { tags: vec![] };
 
-    // If an entry exists, append its tags to the taglist
-    if let Ok(json) = json {
+    // Deserialize any existing tags and append them to the new tags
+    if let Ok((_, json)) = &query {
+        // TODO: unwrap() may panic, it is not great (anybody could fuck with the database and jank it up)
         let mut deserialized: Taglist = serde_json::from_str(&json).unwrap();
-        taglist.tags.append(&mut deserialized.tags);
+        newtags.tags.append(&mut deserialized.tags);
     }
 
-    // Push each of the provided tags into the vector too
+    // Push unique tags onto the end of the vector
     for tag in tags {
-        // TODO: Is there a better way to do this?
         let tag: String = tag.to_string_lossy().to_string();
-        taglist.tags.push(tag);
+
+        if !newtags.tags.contains(&tag) {
+            newtags.tags.push(tag);
+        }
     }
 
-    // Serialize the vector as json
-    let serialized = serde_json::to_string(&taglist)?;
+    // Either insert a row into the database for this file or update the existing one
+    let serialized = serde_json::to_string(&newtags)?;
+    match &query {
+        Err(_) => {
+            // If there was not a row, insert one
+            let mut stmt = conn.prepare("INSERT INTO tags(path, tags) VALUES (?, ?)")?;
+            stmt.execute(params![path.to_string(), serialized])?;
+        },
+        Ok((id, _)) => {
+            // If query is Ok (there was already a row), update it
+            let mut stmt = conn.prepare("UPDATE tags SET tags= ? WHERE id = ?")?;
+            stmt.execute(params![serialized, id])?;
+        },
+    }
 
-    // Insert or replace the correct row with the updated tags
-    let mut stmt = conn.prepare("INSERT OR REPLACE INTO tags(path, tags) VALUES (?, ?);")?;
-    stmt.execute(params![path.to_string(), serialized])?;
-
-    Ok(())
+    // Return the new tags to the caller
+    Ok(newtags.tags)
 }
 
-pub fn remove_tags(path: &Utf8PathBuf, tags: Vec<OsString>) -> Result<(), FtagError> {
+pub fn remove_tags(path: &Utf8PathBuf, _tags: Vec<OsString>) -> Result<Vec<String>, FtagError> {
     if !path.exists() {
         return Err(FtagError::IoError(ErrorKind::NotFound));
     }
 
-    Ok(())
+    todo!();
 }

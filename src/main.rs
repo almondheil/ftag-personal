@@ -78,10 +78,7 @@ fn main() {
             },
             None => {
                 match ftag::get_global_tags() {
-                    Err(err) => match err {
-                        FtagError::DatabaseError(cause) => eprintln!("Database error: {}!", cause.to_string()),
-                        _ => eprintln!("Unexpected error!"),
-                    },
+                    Err(err) => eprintln!("{}", err.to_string()),
                     Ok(tags) => println!("{:?}", tags),
                 }
             },
@@ -89,11 +86,11 @@ fn main() {
 
         Commands::Add { path, tags } => {
             match ftag::add_tags(&path, tags) {
-                Ok(_) => todo!(),
                 Err(err) => match err {
                     FtagError::IoError(ErrorKind::NotFound) => eprintln!("Filepath {} does not exist!", path),
                     _ => eprintln!("{}", err.to_string()),
                 },
+                Ok(newtags) => println!("{:?}", newtags),
             }
         },
 
