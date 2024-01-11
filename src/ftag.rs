@@ -1,7 +1,7 @@
 use camino::Utf8PathBuf;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
-use std::{ffi::OsString, io::ErrorKind, collections::hash_set::HashSet};
+use std::{ffi::OsString, io, collections::hash_set::HashSet};
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
@@ -12,7 +12,7 @@ struct Taglist {
 /// Errors that can occur when using ftag functions
 #[derive(Debug)]
 pub enum FtagError {
-    IoError(ErrorKind),
+    IoError(io::ErrorKind),
     NoDatabaseError,
     DatabaseError(rusqlite::Error),
     JsonError(serde_json::Error),
@@ -25,6 +25,11 @@ impl From<rusqlite::Error> for FtagError {
 impl From<serde_json::Error> for FtagError {
     fn from(err: serde_json::Error) -> Self {
         FtagError::JsonError(err)
+    }
+}
+impl From<io::ErrorKind> for FtagError {
+    fn from(err: io::ErrorKind) -> Self {
+        FtagError::IoError(err)
     }
 }
 impl ToString for FtagError {
@@ -68,9 +73,6 @@ fn update_row_into_db(path: &Utf8PathBuf, serialized: String, query: &Result<(u3
 }
 
 fn query_db_for_path(path: &Utf8PathBuf) -> Result<(u32, String), FtagError> {
-    if !path.exists() {
-        return Err(FtagError::IoError(ErrorKind::NotFound));
-    }
     if !db_exists() {
         return Err(FtagError::NoDatabaseError);
     }
@@ -93,7 +95,7 @@ fn query_db_for_path(path: &Utf8PathBuf) -> Result<(u32, String), FtagError> {
 pub fn init_db() -> Result<(), FtagError> {
     // Refuse to init if the database already exists
     if db_exists() {
-        return Err(FtagError::IoError(ErrorKind::AlreadyExists));
+        return Err(FtagError::IoError(io::ErrorKind::AlreadyExists));
     }
 
     // Create a database and a table within it
@@ -110,30 +112,56 @@ pub fn init_db() -> Result<(), FtagError> {
     Ok(())
 }
 
-pub fn get_file_tags(path: &Utf8PathBuf) -> Result<Vec<String>, FtagError> {
-    // TODO: Can we have different errors for "No database" and "File not found"?
-    if !db_exists() {
-        return Err(FtagError::IoError(ErrorKind::NotFound));
-    }
+pub fn get_file_tags(path: &Utf8PathBuf) -> Result<HashSet<String>, FtagError> {
     if !path.exists() {
-        return Err(FtagError::IoError(ErrorKind::NotFound));
+        return Err(FtagError::IoError(io::ErrorKind::NotFound));
     }
 
-    // TODO: when there are no tags, we should return an
-    let tags = vec!["fake".to_string(), "file".to_string(), "tags".to_string()];
-    Ok(tags)
+    let query: Result<(u32, String), FtagError> = query_db_for_path(path);
+    match query {
+        Ok((_, json)) => {
+            // TODO: another unwrap I should probably handle
+            let tags: Taglist = serde_json::from_str(&json).unwrap();
+            Ok(tags.tags)
+        },
+        Err(_) => {
+            Ok(HashSet::new())
+        },
+    }
 }
 
-pub fn get_global_tags() -> Result<Vec<String>, FtagError> {
+pub fn get_global_tags() -> Result<HashSet<String>, FtagError> {
     if !db_exists() {
         return Err(FtagError::NoDatabaseError);
     }
 
-    let tags = vec!["fake".to_string(), "global".to_string(), "tags".to_string()];
-    Ok(tags)
+    // Create a HashSet that will hold the tags
+    let mut all_tags: HashSet<String> = HashSet::new();
+
+    let conn = Connection::open(get_db_path())?;
+    let mut stmt = conn.prepare("SELECT tags FROM tags;")?;
+    let result = stmt.query_map( params![],
+        |row| {
+            // Process each name in the result set
+            let tags: String = row.get(0)?;
+            let deserialized: Taglist = serde_json::from_str(&tags).unwrap();
+            for tag in deserialized.tags {
+                all_tags.insert(tag);
+            }
+            Ok(())
+        },
+    )?;
+
+    // TODO: I'm supposed to check for errors in the result what do I do here
+    result.for_each(|_| {});
+    Ok(all_tags)
 }
 
 pub fn add_tags(path: &Utf8PathBuf, add_tags: Vec<OsString>) -> Result<HashSet<String>, FtagError> {
+    if !path.exists() {
+        return Err(FtagError::IoError(io::ErrorKind::NotFound));
+    }
+    
     let query = query_db_for_path(path);
     
     // Create an empty list of tags
@@ -148,13 +176,10 @@ pub fn add_tags(path: &Utf8PathBuf, add_tags: Vec<OsString>) -> Result<HashSet<S
         }
     }
 
-    // Push unique tags onto the end of the vector
+    // Insert any unique new tags
     for tag in add_tags {
         let tag: String = tag.to_string_lossy().to_string();
-
-        if !newtags.tags.contains(&tag) {
-            newtags.tags.insert(tag);
-        }
+        newtags.tags.insert(tag);
     }
 
     // Update that row in the database
@@ -163,7 +188,11 @@ pub fn add_tags(path: &Utf8PathBuf, add_tags: Vec<OsString>) -> Result<HashSet<S
 }
 
 pub fn remove_tags(path: &Utf8PathBuf, remove_tags: Vec<OsString>) -> Result<HashSet<String>, FtagError> {
-    let query = query_db_for_path(path);
+    if !path.exists() {
+        return Err(FtagError::IoError(io::ErrorKind::NotFound));
+    }
+    
+    let query: Result<(u32, String), FtagError> = query_db_for_path(path);
     
     // Create an empty list of tags
     let mut newtags = Taglist { tags: HashSet::new() };
