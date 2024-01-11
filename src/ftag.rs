@@ -1,12 +1,12 @@
 use camino::Utf8PathBuf;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
-use std::{ffi::OsString, io::ErrorKind};
+use std::{ffi::OsString, io::ErrorKind, collections::hash_set::HashSet};
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
 struct Taglist {
-    tags: Vec<String>,
+    tags: HashSet<String>,
 }
 
 /// Errors that can occur when using ftag functions
@@ -133,17 +133,19 @@ pub fn get_global_tags() -> Result<Vec<String>, FtagError> {
     Ok(tags)
 }
 
-pub fn add_tags(path: &Utf8PathBuf, add_tags: Vec<OsString>) -> Result<Vec<String>, FtagError> {
+pub fn add_tags(path: &Utf8PathBuf, add_tags: Vec<OsString>) -> Result<HashSet<String>, FtagError> {
     let query = query_db_for_path(path);
     
     // Create an empty list of tags
-    let mut newtags = Taglist { tags: vec![] };
+    let mut newtags = Taglist { tags: HashSet::new() };
 
-    // Deserialize any existing tags and append them to the new tags
+    // Deserialize any existing tags and add them into the existing tags
     if let Ok((_, json)) = &query {
         // TODO: unwrap() may panic, it is not great (anybody could fuck with the database and jank it up)
-        let mut deserialized: Taglist = serde_json::from_str(&json).unwrap();
-        newtags.tags.append(&mut deserialized.tags);
+        let deserialized: Taglist = serde_json::from_str(&json).unwrap();
+        for tag in deserialized.tags {
+            newtags.tags.insert(tag);
+        }
     }
 
     // Push unique tags onto the end of the vector
@@ -151,7 +153,7 @@ pub fn add_tags(path: &Utf8PathBuf, add_tags: Vec<OsString>) -> Result<Vec<Strin
         let tag: String = tag.to_string_lossy().to_string();
 
         if !newtags.tags.contains(&tag) {
-            newtags.tags.push(tag);
+            newtags.tags.insert(tag);
         }
     }
 
@@ -160,11 +162,11 @@ pub fn add_tags(path: &Utf8PathBuf, add_tags: Vec<OsString>) -> Result<Vec<Strin
     Ok(newtags.tags)
 }
 
-pub fn remove_tags(path: &Utf8PathBuf, remove_tags: Vec<OsString>) -> Result<Vec<String>, FtagError> {
+pub fn remove_tags(path: &Utf8PathBuf, remove_tags: Vec<OsString>) -> Result<HashSet<String>, FtagError> {
     let query = query_db_for_path(path);
     
     // Create an empty list of tags
-    let mut newtags = Taglist { tags: vec![] };
+    let mut newtags = Taglist { tags: HashSet::new() };
 
     // Deserialize any existing tags and append them to the new tags
     if let Ok((_, json)) = &query {
@@ -175,7 +177,7 @@ pub fn remove_tags(path: &Utf8PathBuf, remove_tags: Vec<OsString>) -> Result<Vec
         for tag in deserialized.tags {
             // TODO: do we really need to clone? It's frustrating
             if !remove_tags.contains(&tag.clone().into()) {
-                newtags.tags.push(tag);
+                newtags.tags.insert(tag);
             }
         }
     }
