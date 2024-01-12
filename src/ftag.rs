@@ -324,10 +324,14 @@ pub fn remove_tags(path: &Utf8PathBuf, remove_tags: Vec<String>) -> Result<HashS
 /// # Failure
 /// 
 /// Returns `Err` if there is no database, errors occur when deserializing data, or errors occur when querying the database.
-pub fn find_tags(find_tags: &Vec<String>) -> Result<Vec<String>, FtagError> {
+pub fn find_tags(find_tags: &Vec<String>, exclude_tags: &Vec<String>) -> Result<Vec<String>, FtagError> {
     if !get_db_path().exists() {
         return Err(FtagError::NoDatabaseError);
     }
+
+    // Convert find and exclude tags into HashSets, as we'll be checking containment a lot
+    let find_tags: HashSet<String> = HashSet::from_iter(find_tags.iter().cloned());
+    let exclude_tags: HashSet<String> = HashSet::from_iter(exclude_tags.iter().cloned());
 
     // Store a vector of the files containing those tags
     let mut matching_files: Vec<String> = vec![];
@@ -342,11 +346,21 @@ pub fn find_tags(find_tags: &Vec<String>) -> Result<Vec<String>, FtagError> {
             // TODO: This unwrap should be avoided
             let deserialized: Taglist = serde_json::from_str(&tags).unwrap();
 
-            let all_tags_match = find_tags.iter().all(|item| deserialized.tags.contains(item));
-            if all_tags_match {
+            // Are all tags in find_tags contained by deserialized?
+            let find_tags_contained = find_tags
+                .iter()
+                .all(|tag| deserialized.tags.contains(tag));
+
+            // Are all tags in exclude_tags NOT contained by deserialized?
+            let exclude_tags_not_contained = exclude_tags
+                .iter()
+                .all(|tag| !deserialized.tags.contains(tag));
+           
+            // Store the filename if it satisfies both conditions
+            if find_tags_contained && exclude_tags_not_contained {
                 matching_files.push(name);
             }
-            
+
             Ok(())
         },
     )?;

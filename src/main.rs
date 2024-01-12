@@ -61,8 +61,13 @@ enum Commands {
     /// Find files with particular tags
     #[command(arg_required_else_help = true)]
     Find {
-        #[arg(required = true)]
+        /// Tags that matching files must have
+        #[arg(required=true)]
         tags: Vec<String>,
+
+        /// Optional tags which matching files must not have
+        #[arg(required=false, last=true)]
+        exclude: Vec<String>,
     },
 
     /// Rename a single tag for a path
@@ -176,8 +181,8 @@ fn main() {
             }
         },
 
-        Commands::Find { tags } => {
-            match ftag::find_tags(&tags) {
+        Commands::Find { tags, exclude } => {
+            match ftag::find_tags(&tags, &exclude) {
                 Err(err) => eprintln!("{}", err.to_string()),
                 Ok(mut files) => {
                     // Alphabetize the vector returned
