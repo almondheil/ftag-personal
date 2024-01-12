@@ -81,10 +81,14 @@ enum Commands {
     }
 }
 
-fn display_tags(tags: HashSet<String>) {
+fn display_tags(tags: HashSet<String>, reverse: bool) {
     // Get the HashSet as a vector and alphabetize it
     let mut tags: Vec<_> = tags.into_iter().collect();
     tags.sort(); // alphabetic and case-sensitive
+
+    if reverse {
+        tags.reverse();
+    }
 
     // Print them out with a little header 
     for tag in tags {
@@ -114,7 +118,7 @@ fn main() {
                         FtagError::IoError(ErrorKind::NotFound) => eprintln!("Filepath {} does not exist!", path),
                         _ => eprintln!("{}", err.to_string())
                     }
-                    Ok(tags) => display_tags(tags),
+                    Ok(tags) => display_tags(tags, reverse),
                 }
             },
             None => {
@@ -158,7 +162,7 @@ fn main() {
                     FtagError::IoError(ErrorKind::NotFound) => eprintln!("Filepath {} does not exist!", path),
                     _ => eprintln!("{}", err.to_string()),
                 },
-                Ok(new_tags) => display_tags(new_tags),
+                Ok(new_tags) => display_tags(new_tags, false),
             }
         },
 
@@ -168,7 +172,7 @@ fn main() {
                     FtagError::IoError(ErrorKind::NotFound) => eprintln!("Filepath {} does not exist!", path),
                     _ => eprintln!("{}", err.to_string()),
                 },
-                Ok(new_tags) => display_tags(new_tags),
+                Ok(new_tags) => display_tags(new_tags, false),
             }
         },
 
@@ -212,7 +216,7 @@ fn main() {
                     // Print out the properly updated tags
                     match ftag::get_file_tags(&path) {
                         Err(err) => eprintln!("{}", err.to_string()),
-                        Ok(tags) => display_tags(tags),
+                        Ok(tags) => display_tags(tags, false),
                     }
                 }
             }
