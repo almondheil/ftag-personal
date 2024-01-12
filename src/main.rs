@@ -4,6 +4,7 @@ use clap::{Parser, Subcommand};
 
 mod ftag;
 use ftag::{FtagError, get_file_tags};
+use itertools::Itertools;
 
 /// Utility to tag files for easy access
 #[derive(Debug, Parser)]
@@ -63,7 +64,11 @@ enum Commands {
     Find {
         /// Tags that matching files must have
         #[arg(required=true)]
-        tags: Vec<String>,
+        find: Vec<String>,
+
+        // Display tags of each file
+        #[arg(short, long)]
+        tags: bool,
 
         /// Optional tags which matching files must not have
         #[arg(required=false, last=true)]
@@ -181,16 +186,19 @@ fn main() {
             }
         },
 
-        Commands::Find { tags, exclude } => {
-            match ftag::find_tags(&tags, &exclude) {
+        Commands::Find { find, exclude , tags } => {
+            match ftag::find_tags(&find, &exclude) {
                 Err(err) => eprintln!("{}", err.to_string()),
                 Ok(mut files) => {
                     // Alphabetize the vector returned
-                    files.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+                    files.sort_by(|a, b| a.0.to_lowercase().cmp(&b.0.to_lowercase()));
 
                     // Print them out with a little header 
-                    for file in files {
+                    for (file, file_tags) in files {
                         println!("{}", file);
+                        if tags {
+                            println!("  {}", file_tags.iter().format("; "));
+                        }
                     }
                 },
             }

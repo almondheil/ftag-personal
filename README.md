@@ -199,6 +199,18 @@ example.jpg
 example4.jpg
 ```
 
+Finally, you can show the tags of each found file:
+
+```
+$ ftag find red-rocks --tags
+example.jpg
+  landscape-photo; red-rocks
+example2.jpg
+  portrait-photo; red-rocks
+example4.jpg
+  landscape-photo; red-rocks
+```
+
 ## Deleting the database
 
 I don't provide a command to do this (yet, at least), 

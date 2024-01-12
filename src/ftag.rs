@@ -1,4 +1,5 @@
 use camino::Utf8PathBuf;
+use itertools::Itertools;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::{io, collections::{hash_map::HashMap, hash_set::HashSet}};
@@ -324,7 +325,7 @@ pub fn remove_tags(path: &Utf8PathBuf, remove_tags: Vec<String>) -> Result<HashS
 /// # Failure
 /// 
 /// Returns `Err` if there is no database, errors occur when deserializing data, or errors occur when querying the database.
-pub fn find_tags(find_tags: &Vec<String>, exclude_tags: &Vec<String>) -> Result<Vec<String>, FtagError> {
+pub fn find_tags(find_tags: &Vec<String>, exclude_tags: &Vec<String>) -> Result<Vec<(String, Vec<String>)>, FtagError> {
     if !get_db_path().exists() {
         return Err(FtagError::NoDatabaseError);
     }
@@ -334,7 +335,7 @@ pub fn find_tags(find_tags: &Vec<String>, exclude_tags: &Vec<String>) -> Result<
     let exclude_tags: HashSet<String> = HashSet::from_iter(exclude_tags.iter().cloned());
 
     // Store a vector of the files containing those tags
-    let mut matching_files: Vec<String> = vec![];
+    let mut matching_files: Vec<(String, Vec<String>)> = vec![];
 
     let conn = Connection::open(get_db_path())?;
     let mut stmt = conn.prepare("SELECT path, tags FROM tags;")?;
@@ -358,7 +359,9 @@ pub fn find_tags(find_tags: &Vec<String>, exclude_tags: &Vec<String>) -> Result<
            
             // Store the filename if it satisfies both conditions
             if find_tags_contained && exclude_tags_not_contained {
-                matching_files.push(name);
+                let mut vec_tags = deserialized.tags.into_iter().collect_vec();
+                vec_tags.sort();
+                matching_files.push((name, vec_tags));
             }
 
             Ok(())
