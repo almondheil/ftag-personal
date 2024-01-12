@@ -43,27 +43,38 @@ impl ToString for FtagError {
     }
 }
 
-/// Get the path to the database
+/// Get the path to the database.
 fn get_db_path() -> Utf8PathBuf {
     Utf8PathBuf::from("ftag.db")
 }
 
-/// Determine whether the database exists in the current directory
-fn db_exists() -> bool {
-    get_db_path().exists()
-}
-
-/// Update or create a database entry for a path
-fn update_row_into_db(path: &Utf8PathBuf, serialized: String, query: &Result<(u32, String), FtagError>) -> Result<(), FtagError> {
+/// Update or create a database entry for a path.
+/// 
+/// * `path` - Path to save in the database row, used to search for existing entry.
+/// * `serialized` - JSON representation of the tags to save
+/// 
+/// # Failure
+/// 
+/// Returns `Err` if there is no database in the current directory or if database queries or statements fail.
+fn update_row_into_db(path: &Utf8PathBuf, serialized: String) -> Result<(), FtagError> {
+    if !get_db_path().exists() {
+        return Err(FtagError::NoDatabaseError);
+    }
+    
     let conn = Connection::open(get_db_path())?;
+    
+    // Query the database for that path
+    let query = query_db_for_path(path);
+    
+    // Depending on whether a row exists, insert or update
     match query {
         Err(_) => {
-            // If there was not a row, insert one
+            // Err means there was no such row, so we insert
             let mut stmt = conn.prepare("INSERT INTO tags(path, tags) VALUES (?, ?)")?;
             stmt.execute(params![path.to_string(), serialized])?;
         },
         Ok((id, _)) => {
-            // If query is Ok (there was already a row), update it
+            // Ok means there was a row, so we update it
             let mut stmt = conn.prepare("UPDATE tags SET tags= ? WHERE id = ?")?;
             stmt.execute(params![serialized, id])?;
         },
@@ -72,8 +83,15 @@ fn update_row_into_db(path: &Utf8PathBuf, serialized: String, query: &Result<(u3
     Ok(())
 }
 
+/// Query the database for a given path, returning the id and tags on a success.
+/// 
+/// * `path` - Path to query for
+/// 
+/// # Failure
+/// 
+/// Returns Err if there is no database in the current directory or if database query fails.
 fn query_db_for_path(path: &Utf8PathBuf) -> Result<(u32, String), FtagError> {
-    if !db_exists() {
+    if !get_db_path().exists() {
         return Err(FtagError::NoDatabaseError);
     }
     
@@ -92,9 +110,13 @@ fn query_db_for_path(path: &Utf8PathBuf) -> Result<(u32, String), FtagError> {
 }
 
 /// Initialize the database if it does not already exist, returning whether it was created.
+/// 
+/// # Failure
+/// 
+/// Returns `Err` if a database already exists in the current directory
 pub fn init_db() -> Result<(), FtagError> {
     // Refuse to init if the database already exists
-    if db_exists() {
+    if get_db_path().exists() {
         return Err(FtagError::IoError(io::ErrorKind::AlreadyExists));
     }
 
@@ -112,6 +134,13 @@ pub fn init_db() -> Result<(), FtagError> {
     Ok(())
 }
 
+/// Return the tags belonging to a certain path, or the empty set if there are none.
+/// 
+/// * `path` - Path to the file to check
+/// 
+/// # Failure
+/// 
+/// Returns `Err` if `path` does not exist, there is no database, or errors occur when deserializing JSON or querying the database.
 pub fn get_file_tags(path: &Utf8PathBuf) -> Result<HashSet<String>, FtagError> {
     if !path.exists() {
         return Err(FtagError::IoError(io::ErrorKind::NotFound));
@@ -120,8 +149,7 @@ pub fn get_file_tags(path: &Utf8PathBuf) -> Result<HashSet<String>, FtagError> {
     let query: Result<(u32, String), FtagError> = query_db_for_path(path);
     match query {
         Ok((_, json)) => {
-            // TODO: another unwrap I should probably handle
-            let tags: Taglist = serde_json::from_str(&json).unwrap();
+            let tags: Taglist = serde_json::from_str(&json)?;
             Ok(tags.tags)
         },
         Err(_) => {
@@ -130,8 +158,13 @@ pub fn get_file_tags(path: &Utf8PathBuf) -> Result<HashSet<String>, FtagError> {
     }
 }
 
+/// Return the set of all tags used in the current database.
+/// 
+/// # Failure
+/// 
+/// Returns `Err` if there is no database or errors occur when deserializing JSON or querying the database.
 pub fn get_global_tags() -> Result<HashSet<String>, FtagError> {
-    if !db_exists() {
+    if !get_db_path().exists() {
         return Err(FtagError::NoDatabaseError);
     }
 
@@ -143,6 +176,7 @@ pub fn get_global_tags() -> Result<HashSet<String>, FtagError> {
     let result = stmt.query_map( params![],
         |row| {
             let tags: String = row.get(0)?;
+            // TODO: Can I avoid unwrapping?
             let deserialized: Taglist = serde_json::from_str(&tags).unwrap();
             for tag in deserialized.tags {
                 all_tags.insert(tag);
@@ -151,11 +185,18 @@ pub fn get_global_tags() -> Result<HashSet<String>, FtagError> {
         },
     )?;
 
-    // TODO: I'm supposed to check for errors in the result what do I do here
-    result.for_each(|_| {});
+    result.for_each(|_| ());
     Ok(all_tags)
 }
 
+/// Add tags to a file's record in the database, returning the set of tags now assigned to that file.
+/// 
+/// * `path` - Path to the file to add tags to
+/// * `add_tags` - Vector containing tags to add. Duplicate tags will be ignored.
+/// 
+/// # Failure
+/// 
+/// Returns `Err` if `path` does not exist, there is no database in the current directory, or errors occur when serializing and deserializing data or interacting with the database.
 pub fn add_tags(path: &Utf8PathBuf, add_tags: Vec<String>) -> Result<HashSet<String>, FtagError> {
     if !path.exists() {
         return Err(FtagError::IoError(io::ErrorKind::NotFound));
@@ -168,23 +209,30 @@ pub fn add_tags(path: &Utf8PathBuf, add_tags: Vec<String>) -> Result<HashSet<Str
 
     // Deserialize any existing tags and add them into the existing tags
     if let Ok((_, json)) = &query {
-        // TODO: unwrap() may panic, it is not great (anybody could fuck with the database and jank it up)
-        let deserialized: Taglist = serde_json::from_str(&json).unwrap();
+        let deserialized: Taglist = serde_json::from_str(&json)?;
         for tag in deserialized.tags {
             newtags.tags.insert(tag);
         }
     }
 
-    // Insert any unique new tags
+    // Insert any unique tags to be added
     for tag in add_tags {
         newtags.tags.insert(tag);
     }
 
     // Update that row in the database
-    update_row_into_db(path, serde_json::to_string(&newtags)?, &query)?;    
+    update_row_into_db(path, serde_json::to_string(&newtags)?)?;    
     Ok(newtags.tags)
 }
 
+/// Remove tags from a file's record in the database, returning the set of tags now assigned to that file.
+/// 
+/// * path - Path to the file to remove tags from
+/// * remove_tags - Vector containing tags to remove. Any tags not belonging to `path` will be ignored.
+/// 
+/// # Failure
+/// 
+/// Returns `Err` if `path` does not exist, there is no database in the current directory, or errors occur when serializing and deserializing data or interacting with the database.
 pub fn remove_tags(path: &Utf8PathBuf, remove_tags: Vec<String>) -> Result<HashSet<String>, FtagError> {
     if !path.exists() {
         return Err(FtagError::IoError(io::ErrorKind::NotFound));
@@ -197,25 +245,30 @@ pub fn remove_tags(path: &Utf8PathBuf, remove_tags: Vec<String>) -> Result<HashS
 
     // Deserialize any existing tags and append them to the new tags
     if let Ok((_, json)) = &query {
-        // TODO: unwrap() may panic, it is not great (anybody could fuck with the database and jank it up)
-        let deserialized: Taglist = serde_json::from_str(&json).unwrap();
+        let deserialized: Taglist = serde_json::from_str(&json)?;
         
         // Let newtags contain all tags not in remove_tags
         for tag in deserialized.tags {
-            // TODO: do we really need to clone? It's frustrating
-            if !remove_tags.contains(&tag.clone().into()) {
+            if !remove_tags.contains(&tag) {
                 newtags.tags.insert(tag);
             }
         }
     }
 
     // Update that row in the database
-    update_row_into_db(path, serde_json::to_string(&newtags)?, &query)?;    
+    update_row_into_db(path, serde_json::to_string(&newtags)?)?;    
     Ok(newtags.tags)
 }
 
+/// Check the entire database for files containg all of `find_tags`, returning their paths.
+/// 
+/// * `find_tags` - Vector of tags to filter by. Any matching files will have all of the tags in `find_tags`.
+/// 
+/// # Failure
+/// 
+/// Returns `Err` if there is no database, errors occur when deserializing data, or errors occur when querying the database.
 pub fn find_tags(find_tags: &Vec<String>) -> Result<Vec<String>, FtagError> {
-    if !db_exists() {
+    if !get_db_path().exists() {
         return Err(FtagError::NoDatabaseError);
     }
 
@@ -229,6 +282,7 @@ pub fn find_tags(find_tags: &Vec<String>) -> Result<Vec<String>, FtagError> {
             // Process each name in the result set
             let name: String = row.get(0)?;
             let tags: String = row.get(1)?;
+            // TODO: This unwrap should be avoided
             let deserialized: Taglist = serde_json::from_str(&tags).unwrap();
 
             let all_tags_match = find_tags.iter().all(|item| deserialized.tags.contains(item));
@@ -240,7 +294,6 @@ pub fn find_tags(find_tags: &Vec<String>) -> Result<Vec<String>, FtagError> {
         },
     )?;
 
-    // TODO: I'm supposed to check for errors in the result what do I do here
-    result.for_each(|_| {});
+    result.for_each(|_| ());
     Ok(matching_files)
 }

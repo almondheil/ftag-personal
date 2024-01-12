@@ -58,7 +58,7 @@ enum Commands {
 fn display_tags(name: String, tags: HashSet<String>) {
     // Get the HashSet as a vector and alphabetize it
     let mut tags: Vec<_> = tags.into_iter().collect();
-    tags.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+    tags.sort(); // alphabetic and case-sensitive
 
     // Print them out with a little header 
     println!("{} tags:", name);
