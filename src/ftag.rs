@@ -109,6 +109,44 @@ fn query_db_for_path(path: &Utf8PathBuf) -> Result<(u32, String), FtagError> {
     Ok(query)
 }
 
+/// Go through every row in the database, removing entries for paths that no longer exist
+/// 
+/// # Failure
+/// 
+/// Returns `Err` if database does not exist or there are errors when interacting with the database.
+fn prune_db() -> Result<(), FtagError> {
+    if !get_db_path().exists() {
+        return Err(FtagError::NoDatabaseError);
+    }
+
+    // Create an empty vector of paths to remove
+    let mut to_remove: Vec<String> = vec![];
+
+    // Go through the database and add all paths that no longer exist to to_remove
+    let conn = Connection::open(get_db_path())?;
+    let mut stmt = conn.prepare("SELECT path FROM tags;")?;
+    let result = stmt.query_map( params![],
+        |row| {
+            let name: String = row.get(0)?;   
+            let path = Utf8PathBuf::from(name.clone());
+
+            if !path.exists() {
+                to_remove.push(name);
+            }
+            Ok(())
+        },
+    )?;
+    result.for_each(|_| ());
+
+    // For all the rows that should be removed, remove them
+    let mut stmt = conn.prepare("DELETE FROM tags WHERE path = ?")?;
+    for name in to_remove {
+        stmt.execute(params![name])?;
+    }
+
+    Ok(())
+}
+
 /// Initialize the database if it does not already exist, returning whether it was created.
 /// 
 /// # Failure
@@ -168,6 +206,11 @@ pub fn get_global_tags() -> Result<HashMap<String, u32>, FtagError> {
         return Err(FtagError::NoDatabaseError);
     }
 
+    // Before we list the global tags, prune the db
+    // This makes sure removed paths don't show up
+    // TODO: But it's also probably slow. Can this be fixed or reduced?
+    prune_db()?;
+
     // Create a HashSet that will hold the tags
     let mut tag_counts: HashMap<String, u32> = HashMap::new();
 
@@ -175,7 +218,7 @@ pub fn get_global_tags() -> Result<HashMap<String, u32>, FtagError> {
     let mut stmt = conn.prepare("SELECT tags FROM tags;")?;
     let result = stmt.query_map( params![],
         |row| {
-            let tags: String = row.get(0)?;
+            let tags: String = row.get(0)?;            
             // TODO: Can I avoid unwrapping?
             let deserialized: Taglist = serde_json::from_str(&tags).unwrap();
             for tag in deserialized.tags {

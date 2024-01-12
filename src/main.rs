@@ -148,7 +148,7 @@ fn main() {
                                 print!("({}) ", pair.1);
                             }
 
-                            // ALways print path
+                            // Always print path
                             println!("{}", pair.0);
                         }
                     },
