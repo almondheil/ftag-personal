@@ -23,11 +23,15 @@ enum Commands {
         /// Target path for list. If unspecified, will list tags globally
         path: Option<Utf8PathBuf>,
 
+        /// Reverse sorting order
+        #[arg(short, long)]
+        reverse: bool,
+
         /// Display tag counts on global list (only on global list)
         #[arg(short, long)]
         count: bool,
 
-        /// Sort by count descending, instead of alphabetically (only on global list)
+        /// Sort by descending count, instead of alphabetically (only on global list)
         #[arg(short, long)]
         sortcount: bool,
     },
@@ -103,7 +107,7 @@ fn main() {
             }
         }
 
-        Commands::List { path, count, sortcount} => match path {
+        Commands::List { path, reverse, count, sortcount} => match path {
             Some(path) => {
                 match ftag::get_file_tags(&path) {
                     Err(err) => match err {
@@ -127,6 +131,11 @@ fn main() {
                         } else {
                             // Sort alphabetically, ascending order
                             pairs.sort_by(|a, b| a.0.cmp(&b.0));
+                        }
+
+                        // Reverse the list if that was specified
+                        if reverse {
+                            pairs.reverse();
                         }
 
                         for pair in pairs {
