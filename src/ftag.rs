@@ -1,7 +1,7 @@
 use camino::Utf8PathBuf;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
-use std::{io, collections::hash_set::HashSet};
+use std::{io, collections::{hash_map::HashMap, hash_set::HashSet}};
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
@@ -163,13 +163,13 @@ pub fn get_file_tags(path: &Utf8PathBuf) -> Result<HashSet<String>, FtagError> {
 /// # Failure
 /// 
 /// Returns `Err` if there is no database or errors occur when deserializing JSON or querying the database.
-pub fn get_global_tags() -> Result<HashSet<String>, FtagError> {
+pub fn get_global_tags() -> Result<HashMap<String, u32>, FtagError> {
     if !get_db_path().exists() {
         return Err(FtagError::NoDatabaseError);
     }
 
     // Create a HashSet that will hold the tags
-    let mut all_tags: HashSet<String> = HashSet::new();
+    let mut tag_counts: HashMap<String, u32> = HashMap::new();
 
     let conn = Connection::open(get_db_path())?;
     let mut stmt = conn.prepare("SELECT tags FROM tags;")?;
@@ -179,14 +179,28 @@ pub fn get_global_tags() -> Result<HashSet<String>, FtagError> {
             // TODO: Can I avoid unwrapping?
             let deserialized: Taglist = serde_json::from_str(&tags).unwrap();
             for tag in deserialized.tags {
-                all_tags.insert(tag);
+
+                if tag_counts.contains_key(&tag) {
+                    // Get the current count
+                    let count = tag_counts.get(&tag).unwrap() + 1;
+
+                    // Remove and re-add the key-value pair
+                    tag_counts.remove(&tag);
+                    tag_counts.insert(tag, count);
+                } else {
+                    // Add a count of 1
+                    tag_counts.insert(tag, 1);
+                }
             }
             Ok(())
         },
     )?;
 
+    // Do nothing for each item in the iterator, to get them to evaluate
     result.for_each(|_| ());
-    Ok(all_tags)
+
+    // Once we have evaluated the iterator items, we can return the counts
+    Ok(tag_counts)
 }
 
 /// Add tags to a file's record in the database, returning the set of tags now assigned to that file.

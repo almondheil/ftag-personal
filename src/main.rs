@@ -18,10 +18,18 @@ enum Commands {
     /// Initialize the database
     Init,
 
-    /// List tags of a path or whole database
+    /// List tags of a path or globally
     List {
-        /// Target path
+        /// Target path for list. If unspecified, will list tags globally
         path: Option<Utf8PathBuf>,
+
+        /// Display tag counts on global list (only on global list)
+        #[arg(short, long)]
+        count: bool,
+
+        /// Sort by count descending, instead of alphabetically (only on global list)
+        #[arg(short, long)]
+        sortcount: bool,
     },
 
     /// Add tags to a path
@@ -60,9 +68,11 @@ enum Commands {
         path: Utf8PathBuf,
 
         /// Old tag name
+        #[arg(name="OLD")]
         old_tag: String,
 
         /// New tag name
+        #[arg(name="NEW")]
         new_tag: String,
     }
 }
@@ -93,7 +103,7 @@ fn main() {
             }
         }
 
-        Commands::List { path } => match path {
+        Commands::List { path, count, sortcount} => match path {
             Some(path) => {
                 match ftag::get_file_tags(&path) {
                     Err(err) => match err {
@@ -106,7 +116,29 @@ fn main() {
             None => {
                 match ftag::get_global_tags() {
                     Err(err) => eprintln!("{}", err.to_string()),
-                    Ok(tags) => display_tags(tags),
+                    Ok(tag_counts) => {
+                        // Collect the keys and value into a vector of tuples
+                        let mut pairs: Vec<(String, u32)> = tag_counts.into_iter().collect();
+
+                        // Sort either by counts or alphabetically
+                        if sortcount {
+                            // Sort by count, descending order
+                            pairs.sort_by(|a, b| b.1.cmp(&a.1));
+                        } else {
+                            // Sort alphabetically, ascending order
+                            pairs.sort_by(|a, b| a.0.cmp(&b.0));
+                        }
+
+                        for pair in pairs {
+                            // If printing counts, put "(#) " on the same line
+                            if count {
+                                print!("({}) ", pair.1);
+                            }
+
+                            // ALways print path
+                            println!("{}", pair.0);
+                        }
+                    },
                 }
             },
         },
