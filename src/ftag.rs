@@ -45,7 +45,7 @@ impl ToString for FtagError {
 
 /// Get the path to the database.
 fn get_db_path() -> Utf8PathBuf {
-    Utf8PathBuf::from("ftag.db")
+    Utf8PathBuf::from(".ftag.db")
 }
 
 /// Update or create a database entry for a path.
