@@ -330,6 +330,11 @@ pub fn find_tags(find_tags: &Vec<String>, exclude_tags: &Vec<String>) -> Result<
         return Err(FtagError::NoDatabaseError);
     }
 
+    // Before we do anything, prune the db
+    // This makes sure removed paths don't show up
+    // TODO: But it's also probably slow. Can this be fixed or reduced?
+    prune_db()?;
+
     // Convert find and exclude tags into HashSets, as we'll be checking containment a lot
     let find_tags: HashSet<String> = HashSet::from_iter(find_tags.iter().cloned());
     let exclude_tags: HashSet<String> = HashSet::from_iter(exclude_tags.iter().cloned());
