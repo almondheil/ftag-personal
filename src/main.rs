@@ -1,6 +1,7 @@
 use std::{io::ErrorKind, collections::HashSet};
 use camino::Utf8PathBuf;
 use clap::{Parser, Subcommand};
+use rand::seq::SliceRandom;
 
 mod ftag;
 use ftag::{FtagError, get_file_tags};
@@ -63,12 +64,24 @@ enum Commands {
     #[command(arg_required_else_help = true)]
     Find {
         /// Tags that matching files must have
-        #[arg(required=true)]
+        #[arg(required=false)]
         find: Vec<String>,
 
         // Display tags of each file
         #[arg(short, long)]
         tags: bool,
+
+        /// Optional tags which matching files must not have
+        #[arg(required=false, last=true)]
+        exclude: Vec<String>,
+    },
+
+    /// Select a random file with specific tags
+    #[command(arg_required_else_help = true)]
+    Rand {
+        /// Tags that matching files must have
+        #[arg(required=false)]
+        find: Vec<String>,
 
         /// Optional tags which matching files must not have
         #[arg(required=false, last=true)]
@@ -100,7 +113,7 @@ fn display_tags(tags: HashSet<String>, reverse: bool) {
         tags.reverse();
     }
 
-    // Print them out with a little header 
+    // Print them out with a little header
     for tag in tags {
         println!("{}", tag);
     }
@@ -193,7 +206,7 @@ fn main() {
                     // Alphabetize the vector returned
                     files.sort_by(|a, b| a.0.to_lowercase().cmp(&b.0.to_lowercase()));
 
-                    // Print them out with a little header 
+                    // Print them out with a little header
                     for (file, file_tags) in files {
                         println!("{}", file);
                         if tags {
@@ -204,7 +217,19 @@ fn main() {
             }
         },
 
-        Commands::Rename { path, old_tag, new_tag} => { 
+        Commands::Rand { find, exclude } => {
+            match ftag::find_tags(&find, &exclude) {
+                Err(err) => eprintln!("{}", err.to_string()),
+                Ok(files) => {
+                    match files.choose(&mut rand::thread_rng()) {
+                        Some((name, _)) => println!("{}", name),
+                        None => println!(),
+                    }
+                },
+            }
+        },
+
+        Commands::Rename { path, old_tag, new_tag} => {
             // Determine whether the path contains old_tag
             let current_tags = get_file_tags(&path);
             match current_tags {
