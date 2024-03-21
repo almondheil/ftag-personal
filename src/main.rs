@@ -77,7 +77,7 @@ enum Commands {
     },
 
     /// Select a random file with specific tags
-    #[command(arg_required_else_help = true)]
+    #[command(arg_required_else_help = false)]
     Rand {
         /// Tags that matching files must have
         #[arg(required=false)]
