@@ -1,3 +1,13 @@
+# Note 2025-01-19
+
+As of today, I've decided that I'll no longer be maintaining this project.
+
+If you somehow stumble across this repo and it appeals to you, I highly recommend you check out <https://github.com/ranjeethmahankali/ftag>. It's built for similar things that this tool was, and it has some really nice features I bet you'll like such as:
+
+- Storing tags in plaintext files (easy to edit, you can even write your own tools to interact with the file format)
+- Commands to list untracked files and files that are tagged but no longer exist
+- Filename globbing and tagging multiple files the same way
+
 # ftag
 
 A utility to tag files, list tags, and search for files with certain tags.
